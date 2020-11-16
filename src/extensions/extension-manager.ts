@@ -5,7 +5,6 @@ import child_process from "child_process";
 import fse from "fs-extra"
 import logger from "../main/logger"
 import { extensionPackagesRoot } from "./extension-loader"
-import { getBundledExtensions } from "../common/utils/app-version"
 
 export interface InstalledExtension {
   readonly manifest: LensExtensionManifest;
@@ -114,7 +113,8 @@ export class ExtensionManager {
 
   async loadExtensions() {
     const bundledExtensions = await this.loadBundledExtensions()
-    const localExtensions = await this.loadFromFolder(this.localFolderPath)
+    const bundledNames = bundledExtensions.map(ext => ext.manifest.name)
+    const localExtensions = await this.loadFromFolder(this.localFolderPath, bundledNames)
     await fse.writeFile(path.join(this.packageJsonPath), JSON.stringify(this.packagesJson, null, 2), { mode: 0o600 })
     await this.installPackages()
     const extensions = bundledExtensions.concat(localExtensions)
@@ -124,12 +124,8 @@ export class ExtensionManager {
   async loadBundledExtensions() {
     const extensions: InstalledExtension[] = []
     const folderPath = this.bundledFolderPath
-    const bundledExtensions = getBundledExtensions()
     const paths = await fse.readdir(folderPath);
     for (const fileName of paths) {
-      if (!bundledExtensions.includes(fileName)) {
-        continue
-      }
       const absPath = path.resolve(folderPath, fileName);
       const manifestPath = path.resolve(absPath, "package.json");
       const ext = await this.getByManifest(manifestPath, { isBundled: true }).catch(() => null)
@@ -141,8 +137,7 @@ export class ExtensionManager {
     return extensions
   }
 
-  async loadFromFolder(folderPath: string): Promise<InstalledExtension[]> {
-    const bundledExtensions = getBundledExtensions()
+  async loadFromFolder(folderPath: string, bundledExtensions: string[]): Promise<InstalledExtension[]> {
     const extensions: InstalledExtension[] = []
     const paths = await fse.readdir(folderPath);
     for (const fileName of paths) {
